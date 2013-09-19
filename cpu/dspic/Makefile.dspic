@@ -1,0 +1,50 @@
+#
+# Makefile for dsPIC
+# @author Chris Shucksmith <chris@shucksmith.co.uk>
+#
+# $Id: $
+#
+
+CONTIKI_CPU_DIRS = . dev
+CONTIKI_SOURCEFILES += rtimer-arch.c watchdog.c
+CONTIKI_CPU=$(CONTIKI)/cpu/dspic
+
+MPLABC_HOME= $(dirname $(which xc16-gcc))/../
+
+CC       = xc16-gcc -omf=elf
+LD       = xc16-gcc -omf=elf 
+AS       = xc16-as
+AR       = xc16-ar
+OBJCOPY  = xc16-objcopy
+STRIP    = xc16-strip
+BIN2HEX  = xc16-bin2hex
+## -I/usr/local/include
+
+CFLAGSNO = -mcpu=33EP512MU810 -c -Wall -I"$(MPLABC_HOME)/support/dsPIC33E/h" -I$(CONTIKI)/platform/$(TARGET) \
+             -I$(CONTIKI)/core -I$(CONTIKI_CPU) -ffunction-sections -D__dsPIC33EP512MU810__=1 $(CONTIKI_PLAT_DEFS) -mlarge-data
+CFLAGS  += $(CFLAGSNO)
+LDFLAGS = -mcpu=33EP512MU810 -Wl,--gc-sections,-Map=contiki-$(TARGET).map,-Tp33EP512MU810.gld,--report-mem,--heap=128 -mlarge-data
+
+## Flags MPLABX applies to pic30-gcc (not yet applied)
+#	--defsym=__MPLAB_DEBUG=1, --defsym=__MPLAB_BUILD=1,
+#  dependancy annotation:   -MMD -MF <blah>.o.d
+
+## Microchip linker discards _main symbol from librarian .a file, so cannot link
+#  the result   http://www.microchip.com/forums/m550276-print.aspx
+# This causes much longer builds as Contiki cannot be pre-compiled to archived elf format
+
+CUSTOM_RULE_ALLOBJS_TO_TARGETLIB=1
+CUSTOM_RULE_LINK=1
+
+.PRECIOUS: %.$(TARGET).hex %.$(TARGET).elf %.$(TARGET).out 
+
+## rewrite end taget:  .hex <--bin2hex-- .out  <--linker--  *.co 
+%.$(TARGET).out: %.co $(PROJECT_OBJECTFILES) $(PROJECT_LIBRARIES) $(CONTIKI_OBJECTFILES)
+	$(LD) $(LDFLAGS) $(TARGET_STARTFILES) ${filter-out %.a,$^} ${filter %.a,$^} $(TARGET_LIBFILES) -o $@
+
+%.$(TARGET).hex: %.$(TARGET).out
+	$(BIN2HEX) $^ -omf=elf
+
+%: %.$(TARGET).hex
+	@
+
